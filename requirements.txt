@@ -1,12 +1,12 @@
-# Arquivo de requisitos para o app Streamlit
+# Requisitos para o App de Dashboard e ML
 
-# Bibliotecas para o Dashboard e manipulação de dados
+# Bibliotecas principais do dashboard e dados
 streamlit
 pandas
 plotly
 numpy
 
-# Bibliotecas para o modelo de Machine Learning
+# Bibliotecas do modelo de Machine Learning
 tensorflow
 scikit-learn
 matplotlib

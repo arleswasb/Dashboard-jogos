@@ -2,14 +2,104 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import re # Importar para a limpeza de caracteres
-import os # Importar para caminhos de arquivo
+import re
+import os
+import base64 # Garanta que base64 está importado!
 
 # --- Configuração da página Streamlit ---
 st.set_page_config(layout="wide", page_title="Dashboard de Análise de Jogos")
 
+# --- Adicionar Imagem de Fundo (App e Sidebar) ---
+background_image_app_path = "background_app.jpg" # Imagem para o fundo do app
+background_image_sidebar_path = "background_sidebar.jpg" # Imagem para o fundo da sidebar
+
+# Função para ler e codificar a imagem em base64
+@st.cache_data
+def get_base64_image(image_path):
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    return None
+
+# Obter imagens codificadas
+encoded_background_app = get_base64_image(background_image_app_path)
+encoded_background_sidebar = get_base64_image(background_image_sidebar_path)
+
+css_string = """
+<style>
+/* Estilo para o fundo principal do aplicativo */
+"""
+if encoded_background_app:
+    css_string += f"""
+    .stApp {{
+        background-image: url("data:image/jpeg;base64,{encoded_background_app}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+    }}
+    """
+else:
+    st.warning(f"A imagem de fundo do app '{background_image_app_path}' não foi encontrada.")
+
+css_string += """
+/* Estilo para o fundo da sidebar */
+"""
+if encoded_background_sidebar:
+    css_string += f"""
+    .stSidebar {{
+        background-image: url("data:image/jpeg;base64,{encoded_background_sidebar}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-attachment: fixed; /* Opcional: faz a imagem da sidebar não rolar com o conteúdo */
+    }}
+    """
+else:
+    st.warning(f"A imagem de fundo da sidebar '{background_image_sidebar_path}' não foi encontrada.")
+
+css_string += """
+/* Ajustes de cor do texto para melhor legibilidade */
+.stMarkdown, .stText, .stHeader, .stSubheader, .stTitle, .stLabel,
+.stSelectbox label, .stMultiSelect label, .stSlider label, .stRadio label,
+.stButton, .stProgress, .stExpander {{
+    color: white; /* Cor do texto padrão para branco */
+    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8); /* Sombra para melhorar contraste */
+}}
+
+/* Ajustar a cor de fundo dos elementos internos do app principal */
+.css-1fv8s86, .css-1dp5vir {{ /* Classes para contêineres principais */
+    background-color: rgba(0, 0, 0, 0.5); /* Fundo semi-transparente para o conteúdo principal */
+    padding: 20px;
+    border-radius: 10px;
+}}
+
+/* Ajustar a cor de fundo dos elementos internos da sidebar */
+.stSidebar > div:first-child {{ /* Container que envolve todo o conteúdo da sidebar */
+    background-color: rgba(0, 0, 0, 0.6); /* Fundo semi-transparente para o conteúdo da sidebar */
+    padding: 10px;
+    border-radius: 10px;
+}}
+/* Ajustar os elementos individuais dentro da sidebar se necessário */
+.stSidebar .stSelectbox > div > div, .stSidebar .stMultiSelect > div > div {{
+    background-color: rgba(255, 255, 255, 0.1); /* Um pouco de transparência para elementos de input */
+    border-radius: 5px;
+}}
+
+/* Ajustes para as imagens da UFRN/DCA */
+.stSidebar img {{
+    background-color: transparent; /* Garante que o fundo das imagens seja transparente */
+}}
+
+</style>
+"""
+st.markdown(css_string, unsafe_allow_html=True)
+
+
 st.title("🎮 Dashboard de Análise de Jogos 🎮")
 st.markdown("Explore dados sobre lançamentos, gêneros, desenvolvedores e preços de jogos.")
+
+
 
 # --- Carregar e Preparar os Dados (Diretamente no Streamlit) ---
 @st.cache_data(show_spinner="Carregando e processando dados base...") # Cachear com spinner

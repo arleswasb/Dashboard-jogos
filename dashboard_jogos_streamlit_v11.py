@@ -10,7 +10,7 @@ import base64 # Garanta que base64 está importado!
 st.set_page_config(layout="wide", page_title="Dashboard de Análise de Jogos")
 
 # --- Adicionar Imagem de Fundo (App e Sidebar) ---
-background_image_app_path = "background_app.jpg" # Imagem para o fundo do app
+background_image_app_path = "Background_app.jpg" # Imagem para o fundo do app
 background_image_sidebar_path = "background_sidebar.jpg" # Imagem para o fundo da sidebar
 
 # Função para ler e codificar a imagem em base64

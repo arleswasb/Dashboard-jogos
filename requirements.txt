@@ -12,15 +12,3 @@ seaborn # Adicionado pois você usa no app
 scikit-learn==1.2.2
 joblib # É bom garantir que esteja listado
 # Arquivo de requisitos para o app Streamlit
-
-# Bibliotecas para o Dashboard e manipulação de dados
-streamlit
-pandas==2.2.3
-plotly
-numpy==1.26.4
-matplotlib
-seaborn # Adicionado pois você usa no app
-
-# Bibliotecas para o modelo de Machine Learning
-scikit-learn==1.2.2
-joblib # É bom garantir que esteja listado

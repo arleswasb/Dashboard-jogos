@@ -1,294 +1,225 @@
-
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import re
-import os
-import base64
-import joblib 
-import numpy as np 
-from sklearn.metrics import confusion_matrix, accuracy_score, classification_report 
-import matplotlib.pyplot as plt 
-import seaborn as sns 
+import re # Importar para a limpeza de caracteres
+import os # Importar para caminhos de arquivo
 
 # --- Configuração da página Streamlit ---
 st.set_page_config(layout="wide", page_title="Dashboard de Análise de Jogos")
 
-# --- Adicionar Imagem de Fundo (App e Sidebar) ---
-background_image_app_path = "Background_app.jpg" # Imagem para o fundo do app
-background_image_sidebar_path = "background_sidebar.jpg" # Imagem para o fundo da sidebar
-
-# Função para ler e codificar a imagem em base64
-@st.cache_data
-def get_base64_image(image_path):
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as img_file:
-            return base64.b64encode(img_file.read()).decode()
-    return None
-
-# Obter imagens codificadas
-encoded_background_app = get_base64_image(background_image_app_path)
-encoded_background_sidebar = get_base64_image(background_image_sidebar_path)
-
-# String de CSS para aplicar os estilos
-css_string = """
-<style>
-/* Estilo para o fundo principal do aplicativo */
-"""
-if encoded_background_app:
-    css_string += f"""
-    .stApp {{
-        background-image: url("data:image/jpeg;base64,{encoded_background_app}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    """
-else:
-    st.warning(f"A imagem de fundo do app '{background_image_app_path}' não foi encontrada.")
-
-css_string += """
-/* Estilo para o fundo da sidebar */
-"""
-if encoded_background_sidebar:
-    css_string += f"""
-    .stSidebar {{
-        background-image: url("data:image/jpeg;base64,{encoded_background_sidebar}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-        background-attachment: fixed;
-    }}
-    """
-else:
-    st.warning(f"A imagem de fundo da sidebar '{background_image_sidebar_path}' não foi encontrada.")
-
-css_string += """
-/* Ajustes de cor do texto para melhor legibilidade */
-.stMarkdown, .stText, .stHeader, .stSubheader, .stTitle, .stLabel,
-.stSelectbox label, .stMultiSelect label, .stSlider label, .stRadio label,
-.stButton, .stProgress, .stExpander {
-    color: white; 
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
-}
-/* Ajustar a cor de fundo dos elementos internos do app principal */
-.css-1fv8s86, .css-1dp5vir {
-    background-color: rgba(0, 0, 0, 0.5);
-    padding: 20px;
-    border-radius: 10px;
-}
-/* Ajustar a cor de fundo dos elementos internos da sidebar */
-.stSidebar > div:first-child {
-    background-color: rgba(0, 0, 0, 0.6);
-    padding: 10px;
-    border-radius: 10px;
-}
-.stSidebar .stSelectbox > div > div, .stSidebar .stMultiSelect > div > div {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-radius: 5px;
-}
-/* Ajustes para as imagens da UFRN/DCA */
-.stSidebar img {
-    background-color: transparent;
-}
-</style>
-"""
-st.markdown(css_string, unsafe_allow_html=True)
-
-
 st.title("🎮 Dashboard de Análise de Jogos 🎮")
 st.markdown("Explore dados sobre lançamentos, gêneros, desenvolvedores e preços de jogos.")
 
-
-# --- FUNÇÃO DE CARREGAMENTO E PRÉ-PROCESSAMENTO DE DADOS ---
-@st.cache_data(show_spinner="Carregando e processando dados base...")
+# --- Carregar e Preparar os Dados (Diretamente no Streamlit) ---
+@st.cache_data(show_spinner="Carregando e processando dados base...") # Cachear com spinner
 def load_and_preprocess_data():
-    """Carrega o dataset, realiza o pré-processamento e retorna o dataframe e os anos min/max."""
-    colunas_com_aviso = {
-        'genre_Action': 'boolean', 'genre_Adventure': 'boolean', 'genre_Indie': 'boolean', 
-        'genre_RPG': 'boolean', 'genre_Simulation': 'boolean', 'genre_Sports': 'boolean', 
-        'genre_Strategy': 'boolean'
-    }
+    """Carrega o dataset e realiza todas as etapas de pré-processamento."""
     try:
-        df = pd.read_csv('DB_completo.csv', dtype=colunas_com_aviso)
+        # ATENÇÃO: Verifique o nome do seu arquivo CSV.
+        df = pd.read_csv('DB_completo.csv')
     except FileNotFoundError:
-        st.error("ERRO: O arquivo 'DB_completo.csv' não foi encontrado. Certifique-se de que ele está na mesma pasta.")
+        st.error("ERRO: O arquivo CSV ('DB.csv') não encontrado. Por favor, certifique-se de que o arquivo está na mesma pasta do script.")
         st.stop()
 
     df.drop_duplicates(inplace=True)
 
+    # Limpeza de caracteres não ASCII para evitar erros de codificação em gráficos
     def remove_non_ascii(text):
-        if isinstance(text, str): return re.sub(r'[^\x00-\x7F]+', '', text)
+        if isinstance(text, str):
+            return re.sub(r'[^\x00-\x7F]+', '', text)
         return text
 
-    text_cols = ['title', 'platform', 'developers', 'publishers']
-    for col in text_cols: df[col] = df[col].apply(remove_non_ascii)
-    
-    genre_columns = [col for col in df.columns if col.startswith('genre_')]
-    df['genre_list'] = df.apply(lambda row: [col.replace('genre_', '') for col in genre_columns if pd.notna(row[col]) and row[col]], axis=1)
-    df['genre_list'] = df['genre_list'].apply(lambda x: x if x else ['Desconhecido']).apply(tuple)
+    df['title'] = df['title'].apply(remove_non_ascii)
+    df['platform'] = df['platform'].apply(remove_non_ascii)
+    df['developers'] = df['developers'].apply(remove_non_ascii)
+    df['publishers'] = df['publishers'].apply(remove_non_ascii)
 
+    genre_columns = [col for col in df.columns if col.startswith('genre_')]
+    df['genre_list'] = df.apply( # Renomeado para genre_list para evitar confusão com 'genre' da explosão
+        lambda row: [col.replace('genre_', '') for col in genre_columns if row[col]],
+        axis=1
+    )
+    # Se a lista de gêneros for vazia, atribui ['Desconhecido']
+    df['genre_list'] = df['genre_list'].apply(lambda x: x if x else ['Desconhecido'])
+
+    # Converter a lista de gêneros para tupla para melhorar o hashing do Pandas (útil para cache)
+    df['genre_list'] = df['genre_list'].apply(tuple)
+
+    # Processamento de Datas
     df['release_year'] = pd.to_numeric(df['release_year'], errors='coerce').fillna(0).astype(int)
     df['release_month'] = pd.to_numeric(df['release_month'], errors='coerce').fillna(1).astype(int)
     df['release_date'] = pd.to_datetime(
-        df['release_year'].astype(str) + '-' + df['release_month'].astype(str).str.zfill(2) + '-01',
+        df['release_year'].astype(str) + '-' +
+        df['release_month'].astype(str).str.zfill(2) + '-01',
         errors='coerce'
     )
-    df.dropna(subset=['release_date'], inplace=True)
+    df.dropna(subset=['release_date'], inplace=True) # Remover linhas com datas inválidas
 
+    # Definir Períodos da Pandemia baseando-se nas datas
     pandemic_start_date = pd.Timestamp('2020-04-01')
     pandemic_end_date = pd.Timestamp('2022-03-31')
-    
+    post_pandemic_start_date = pd.Timestamp('2022-04-01')
+
     def assign_period_with_dates(date):
-        if date < pandemic_start_date: return 'Pré-Pandemia'
-        if pandemic_start_date <= date <= pandemic_end_date: return 'Pandemia'
-        return 'Pós-Pandemia'
-    
+        if date < pandemic_start_date:
+            return 'Pré-Pandemia'
+        elif pandemic_start_date <= date <= pandemic_end_date:
+            return 'Pandemia'
+        elif date >= post_pandemic_start_date:
+            return 'Pós-Pandemia'
+        return 'Desconhecido'
+
     df['periodo'] = df['release_date'].apply(assign_period_with_dates)
 
-    price_cols = ['preco_dolar', 'preco_euro']
-    for col in price_cols: df[col] = pd.to_numeric(df[col], errors='coerce')
-    df.dropna(subset=price_cols, inplace=True)
+    # Garantir colunas de preço numéricas e preencher NaNs
+    df['preco_dolar'] = pd.to_numeric(df['preco_dolar'], errors='coerce')
+    df['preco_euro'] = pd.to_numeric(df['preco_euro'], errors='coerce')
+    df.dropna(subset=['preco_dolar', 'preco_euro'], inplace=True)
 
+    # Corrigir nomes de colunas e preencher NaNs para 'developers' e 'platform'
     df['developers'] = df['developers'].fillna('Desconhecido')
     df['platform'] = df['platform'].fillna('Outra')
 
+    # Obter anos mínimo e máximo do dataset completo
     min_overall_year = int(df['release_year'].min())
     max_overall_year = int(df['release_year'].max())
-    
+
     return df, min_overall_year, max_overall_year
 
-# --- LÓGICA PRINCIPAL DE CARREGAMENTO E FILTROS ---
-
-# 1. Carrega e pré-processa os dados base do CSV
+# Carrega e pré-processa os dados base
 df_main, min_overall_year, max_overall_year = load_and_preprocess_data()
+#st.sidebar.success("Dados base carregados e pré-processados!")
 
-# 2. Carrega TODOS os modelos e colunas de arquivos .joblib separados
-# Modelo de Classificação
-modelo_classificacao = None
-colunas_classificacao = None
-try:
-    modelo_classificacao = joblib.load('modelo_classificacao_jogos.joblib')
-    colunas_classificacao = joblib.load('colunas_classificacao_jogos.joblib')
-except FileNotFoundError as e:
-    st.sidebar.error(f"Arquivo de CLASSIFICAÇÃO não encontrado: {e.filename}.")
-except Exception as e:
-    st.sidebar.error(f"Erro ao carregar arquivos de classificação: {e}")
+# Criando duas colunas na barra lateral
+col1, col2 = st.sidebar.columns(2)
 
-# Modelo de Regressão
-modelo_regressao = None
-colunas_regressao = None
-try:
-    modelo_regressao = joblib.load('modelo_regressao_preco.joblib')
-    colunas_regressao = joblib.load('colunas_regressao_preco.joblib')
-except FileNotFoundError as e:
-    st.sidebar.error(f"Arquivo de REGRESSÃO não encontrado: {e.filename}.")
-except Exception as e:
-    st.sidebar.error(f"Erro ao carregar arquivos de regressão: {e}")
+# Inserindo as imagens nas colunas
+with col1:
+    st.image("ufrn.png", width=150)
 
-if modelo_classificacao is not None and colunas_classificacao is not None and modelo_regressao is not None and colunas_regressao is not None:
-    st.sidebar.success("Todos os modelos foram carregados!")
+with col2:
+    st.image("dca.png", width=100)
 
-# 3. Pré-calcula variáveis para as abas de predição
-dev_popularity = df_main['developers'].value_counts()
-pub_popularity = df_main['publishers'].value_counts()
-all_genres_list = sorted(list(set(g for genres_tuple in df_main['genre_list'] for g in genres_tuple if g != 'Desconhecido')))
+# --- Filtros Globais na Barra Lateral ---
+st.sidebar.header("Filtros Globais")
 
-# --- Conteúdo da Barra Lateral (Sidebar) ---
-with st.sidebar:
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image("ufrn.png", width=150)
-    with col2:
-        st.image("dca.png", width=100)
+# Filtro Global de Plataforma
+all_platforms = ['Todas'] + sorted(df_main['platform'].unique().tolist())
+selected_platform_global = st.sidebar.selectbox("Filtrar por Plataforma:", all_platforms, key='global_platform')
 
-    st.header("Filtros Globais")
+# Filtro Global de Gênero
+# Para o multiselect de gênero, precisamos dos gêneros únicos do df principal, não do explodido
+all_genres_from_main = set()
+for genres_tuple in df_main['genre_list']:
+    for genre_item in genres_tuple:
+        all_genres_from_main.add(genre_item)
+all_genres_global_options = ['Todos'] + sorted(list(all_genres_from_main))
+selected_genre_global = st.sidebar.multiselect("Filtrar por Gênero:", all_genres_global_options, default=all_genres_global_options, key='global_genre')
 
-    # Filtro de Plataforma
-    all_platforms = ['Todas'] + sorted(df_main['platform'].unique().tolist())
-    selected_platform_global = st.selectbox("Plataforma:", all_platforms, key='global_platform')
+# Filtros Globais de Período da Pandemia
+selected_pandemic_periods_global = st.sidebar.multiselect(
+    "Período da Pandemia:",
+    options=['Pré-Pandemia', 'Pandemia', 'Pós-Pandemia'],
+    default=['Pré-Pandemia', 'Pandemia', 'Pós-Pandemia'],
+    key='global_pandemic_periods'
+)
 
-    # Filtro de Gênero
-    all_genres_from_main = sorted(list(set(g for genres_tuple in df_main['genre_list'] for g in genres_tuple)))
-    selected_genre_global = st.multiselect("Gênero(s):", ['Todos'] + all_genres_from_main, default=['Todos'], key='global_genre')
-    if not selected_genre_global: selected_genre_global = ['Todos'] # Garante que não fique vazio
-
-    # Filtro de Período
-    selected_pandemic_periods_global = st.multiselect(
-        "Período:",
-        options=['Pré-Pandemia', 'Pandemia', 'Pós-Pandemia'],
-        default=['Pré-Pandemia', 'Pandemia', 'Pós-Pandemia'],
-        key='global_pandemic_periods'
-    )
-
-@st.cache_data(show_spinner="Aplicando filtros e preparando dados...")
-def apply_all_global_filters(df_base, platform_filter, genre_filter, pandemic_periods_filter, years_filter):
-    """Aplica todos os filtros da sidebar e retorna os dataframes filtrados."""
+# --- Função para aplicar TODOS os filtros globais (Plataforma, Gênero, Período, Ano) ---
+@st.cache_data(show_spinner="Aplicando filtros e preparando dados para gráficos...")
+def apply_all_global_filters(df_base, platform_filter, genre_filter, pandemic_periods_filter, current_years_filter):
     df_filtered = df_base.copy()
 
+    # 1. Filtrar por Plataforma
     if platform_filter != 'Todas':
         df_filtered = df_filtered[df_filtered['platform'] == platform_filter]
 
+    # 2. Filtrar por Período da Pandemia
     if pandemic_periods_filter:
         df_filtered = df_filtered[df_filtered['periodo'].isin(pandemic_periods_filter)]
-
-    if 'Todos' not in genre_filter and genre_filter:
-        df_filtered = df_filtered[df_filtered['genre_list'].apply(lambda genres: any(g in genre_filter for g in genres))]
-
-    if not df_filtered.empty:
-        df_filtered = df_filtered[(df_filtered['release_year'] >= years_filter[0]) & (df_filtered['release_year'] <= years_filter[1])]
-
-    df_genres_exploded = df_filtered.explode('genre_list').rename(columns={'genre_list': 'genre'}) if not df_filtered.empty else pd.DataFrame(columns=df_filtered.columns.tolist() + ['genre'])
-    
-    return df_filtered, df_genres_exploded
-
-# --- Lógica do Slider de Ano Dinâmico ---
-with st.sidebar:
-    # Filtra temporariamente para obter o range de anos dinâmico
-    temp_genres_filter = [] if 'Todos' in selected_genre_global else selected_genre_global
-    temp_filtered_df, _ = apply_all_global_filters(
-        df_main, selected_platform_global, temp_genres_filter, selected_pandemic_periods_global,
-        (min_overall_year, max_overall_year)
-    )
-    
-    if not temp_filtered_df.empty:
-        dynamic_min_year = int(temp_filtered_df['release_year'].min())
-        dynamic_max_year = int(temp_filtered_df['release_year'].max())
     else:
-        dynamic_min_year, dynamic_max_year = min_overall_year, max_overall_year
+        st.warning("Nenhum 'Período da Pandemia' selecionado nos filtros globais. Isso pode resultar em dados vazios.")
+        return pd.DataFrame(), pd.DataFrame(), None, None # Retorna DFs vazios e None para anos
 
-    # Slider de ano
-    if dynamic_min_year > dynamic_max_year: # Prevenção de erro
-        dynamic_min_year = dynamic_max_year
-        
-    selected_years_global = st.slider(
-        'Intervalo de Anos:',
-        min_value=dynamic_min_year,
-        max_value=dynamic_max_year,
-        value=(dynamic_min_year, dynamic_max_year),
-        key='global_years'
-    )
+    # 3. Filtrar por Gênero (usando 'genre_list' para jogos com múltiplos gêneros)
+    if genre_filter and 'Todos' not in genre_filter:
+        df_filtered = df_filtered[
+            df_filtered['genre_list'].apply(lambda genres_in_row_tuple: any(g_in_row in genre_filter for g_in_row in genres_in_row_tuple))
+        ]
 
-# Aplica os filtros finais com o valor do slider de ano
-df_global_filtered, df_genres_global_filtered = apply_all_global_filters(
+    # Calcular o range de anos dinâmico *APÓS* os filtros de plataforma, gênero e pandemia
+    if not df_filtered.empty:
+        dynamic_min_year_calculated = int(df_filtered['release_year'].min())
+        dynamic_max_year_calculated = int(df_filtered['release_year'].max())
+    else:
+        # Se os filtros anteriores resultarem em DataFrame vazio, use o range geral para o slider
+        dynamic_min_year_calculated = min_overall_year
+        dynamic_max_year_calculated = max_overall_year
+
+    # Aplicar filtro de range de anos
+    min_year_slider, max_year_slider = current_years_filter
+    df_filtered = df_filtered[
+        (df_filtered['release_year'] >= min_year_slider) &
+        (df_filtered['release_year'] <= max_year_slider)
+    ]
+
+    # Agora, e SOMENTE AGORA, explodimos para a versão por gênero se necessário
+    # Crie df_genres_exploded_filtered aqui
+    if not df_filtered.empty:
+        df_genres_exploded_filtered = df_filtered.explode('genre_list')
+        df_genres_exploded_filtered.rename(columns={'genre_list': 'genre'}, inplace=True)
+    else:
+        df_genres_exploded_filtered = pd.DataFrame() # Retorna DF vazio se o original for vazio
+
+    return df_filtered, df_genres_exploded_filtered, dynamic_min_year_calculated, dynamic_max_year_calculated
+
+# --- Lógica do Slider de Ano e Reaplicação dos Filtros ---
+# Esta parte é um pouco complexa devido à natureza do Streamlit e o slider dinâmico.
+# Precisamos de um valor inicial para o slider ANTES de aplicar o filtro de ano,
+# e depois ajustá-lo com base nos dados filtrados pelos outros critérios.
+
+# Primeiro, obtenha o range dinâmico baseado nos filtros de plataforma/gênero/pandemia (sem o filtro de ano)
+df_temp_for_year_range, _, dynamic_min_year_calculated_initial, dynamic_max_year_calculated_initial = apply_all_global_filters(
+    df_main, selected_platform_global, selected_genre_global, selected_pandemic_periods_global,
+    (min_overall_year, max_overall_year) # Passa o range completo temporariamente
+)
+
+# Definir os limites min/max do slider
+slider_min_val = dynamic_min_year_calculated_initial if dynamic_min_year_calculated_initial is not None else min_overall_year
+slider_max_val = dynamic_max_year_calculated_initial if dynamic_max_year_calculated_initial is not None else max_overall_year
+
+# Garantir que o valor padrão do slider esteja dentro dos limites atuais
+default_slider_val = st.session_state.get('global_years', (slider_min_val, slider_max_val))
+adjusted_default_min = max(slider_min_val, default_slider_val[0])
+adjusted_default_max = min(slider_max_val, default_slider_val[1])
+if adjusted_default_min > adjusted_default_max: # Corrige caso o range fique invertido
+    adjusted_default_min = slider_min_val
+    adjusted_default_max = slider_max_val
+initial_slider_value_for_display = (adjusted_default_min, adjusted_default_max)
+
+
+selected_years_global = st.sidebar.slider(
+    'Intervalo de Anos:',
+    min_value=slider_min_val,
+    max_value=slider_max_val,
+    value=initial_slider_value_for_display,
+    key='global_years' # Keep the same key for the slider
+)
+
+# RE-APLICAR todos os filtros, agora com o valor FINAL do slider de anos
+df_global_filtered, df_genres_global_filtered, _, _ = apply_all_global_filters(
     df_main, selected_platform_global, selected_genre_global, selected_pandemic_periods_global, selected_years_global
 )
 
-
-
 # --- Geração e Exibição dos Gráficos com Plotly.express em ABAS ---
-tab1, tab2, tab3, tab4, tab5, tab6, tab_matriz, tab_predicao, tab_pred_avancada = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
     "Visão Geral de Lançamentos e Gêneros",
     "Análise por Plataforma e Desenvolvedor",
     "Distribuição de Preços e Tendências",
     "Tendências de Lançamento por Período",
     "Visão Hierárquica",
     "Heatmap de Preços",
-    "Matriz de confusão do modelo",
-    "Predição Simples",
-    "Predição Avançada"
+    "Info Adicional"
 ])
 
 
@@ -591,172 +522,15 @@ with tab6:
     else:
         st.info("Nenhum dado para exibir no Heatmap de Preços com os filtros globais selecionados.")
 
-with tab_matriz:
-    st.header("🔮 Avaliação do Modelo de Classificação")
-    st.markdown("O modelo é aplicado aos dados **filtrados na barra lateral** para gerar métricas de desempenho em tempo real.")
-
-    # CORREÇÃO: Usar os nomes de variáveis corretos 'modelo_classificacao' e 'colunas_classificacao'
-    if modelo_classificacao is not None and colunas_classificacao is not None and not df_global_filtered.empty:
-        with st.spinner("Avaliando modelo nos dados filtrados..."):
-            df_eval = df_global_filtered.copy()
-
-            bins = [0, 15, 45, np.inf]
-            labels = ['Barato', 'Médio', 'Caro']
-            df_eval['faixa_preco'] = pd.cut(df_eval['preco_dolar'], bins=bins, labels=labels, right=False)
-            df_eval.dropna(subset=['faixa_preco'], inplace=True)
-
-            if df_eval.empty:
-                st.warning("Nenhum jogo nos dados filtrados se encaixa nas faixas de preço para avaliação.")
-            else:
-                y_true = df_eval['faixa_preco']
-                cols_to_drop = [
-                    'preco_dolar', 'preco_euro', 'gameid', 'title', 'faixa_preco',
-                    'genre_list', 'release_date', 'periodo'
-                ]
-                features_df = df_eval.drop(columns=[col for col in cols_to_drop if col in df_eval.columns])
-                
-                features_encoded = pd.get_dummies(features_df)
-                
-                # CORREÇÃO: Usar 'colunas_classificacao'
-                X_pred = features_encoded.reindex(columns=colunas_classificacao, fill_value=0)
-
-                # CORREÇÃO: Usar 'modelo_classificacao'
-                y_pred = modelo_classificacao.predict(X_pred)
-                accuracy = accuracy_score(y_true, y_pred)
-                
-                st.metric(label="Acurácia nos Dados Filtrados", value=f"{accuracy:.2%}")
-
-                if y_true.nunique() > 1:
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    cm = confusion_matrix(y_true, y_pred, labels=labels)
-                    sns.heatmap(cm, annot=True, fmt='g', ax=ax, cmap='Blues', xticklabels=labels, yticklabels=labels)
-                    ax.set_xlabel('Previsto')
-                    ax.set_ylabel('Verdadeiro')
-                    ax.set_title('Matriz de Confusão')
-                    st.pyplot(fig)
-                else:
-                    st.warning("Apenas uma classe presente nos dados filtrados. Não é possível gerar a Matriz de Confusão.")
-    else:
-        st.warning("Falha ao carregar o modelo/colunas de CLASSIFICAÇÃO ou não há dados filtrados para avaliação.")
-
-# --- TAB DE PREDIÇÃO DE FAIXA DE PREÇO (CLASSIFICAÇÃO) ---
-with tab_predicao:
-    st.header("🚀 Predição de Faixa de Preço (Classificação)")
-    st.markdown("Preencha as características abaixo para que o modelo classifique o jogo como 'Barato', 'Médio' ou 'Caro'.")
-    st.markdown("---")
-
-    if modelo_classificacao is not None and colunas_classificacao is not None:
-        # --- Widgets de Entrada ---
-        top_15_devs = sorted(dev_popularity.nlargest(15).index.tolist())
-        top_15_pubs = sorted(pub_popularity.nlargest(15).index.tolist())
-        plat_options = sorted(df_main['platform'].unique())
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            class_dev = st.selectbox("Desenvolvedor (Top 15)", options=top_15_devs, key="class_dev")
-            class_pub = st.selectbox("Publicadora (Top 15)", options=top_15_pubs, key="class_pub")
-        with col2:
-            class_plat = st.selectbox("Plataforma", options=plat_options, key="class_plat")
-            class_year = st.number_input("Ano de Lançamento", min_value=1990, max_value=2025, value=2023, key="class_year")
-
-        class_genres = st.multiselect("Selecione os Gêneros", options=all_genres_list, default=[all_genres_list[0]], key="class_genres")
-
-        if st.button("Classificar Jogo", type="primary"):
-            # 1. Criar um DataFrame de uma linha com os dados do usuário
-            input_data = {
-                'release_year': class_year,
-                'platform': class_plat,
-                'developers': class_dev,
-                'publishers': class_pub
-            }
-            # 2. Adicionar as features de GÊNERO exatamente como no treino
-            # Pega todas as colunas de gênero originais do dataframe principal
-            all_original_genre_cols = [col for col in df_main.columns if col.startswith('genre_') and col != 'genre_list']
-            for genre_col in all_original_genre_cols:
-                # Extrai o nome do gênero (ex: 'Action' de 'genre_Action')
-                genre_name = genre_col.replace('genre_', '')
-                # Adiciona a coluna com valor 1 se o gênero foi selecionado, senão 0
-                input_data[genre_col] = 1 if genre_name in class_genres else 0
-            
-            input_df = pd.DataFrame([input_data])
-
-            # Define explicitamente quais colunas devem ser transformadas
-            cols_to_encode = ['platform', 'developers', 'publishers']
-            # O get_dummies agora manterá as colunas numéricas (release_year, genre_*)
-            input_encoded = pd.get_dummies(input_df, columns=cols_to_encode)
-            final_input = input_encoded.reindex(columns=colunas_classificacao, fill_value=0)
-            
-            # 3. Fazer a predição
-            prediction = modelo_classificacao.predict(final_input)
-            resultado = prediction[0]
-
-            st.success(f"### O modelo classificou este jogo como: **{resultado}**")
-            
-    else:
-        st.error("O modelo de classificação e/ou suas colunas não foram carregados. Verifique os logs na barra lateral.")
-
-
-# --- TAB DE PREDIÇÃO DE PREÇO (REGRESSÃO) ---
-with tab_pred_avancada:
-    st.header("🤖 Previsão de Preço (Regressão)")
-    st.markdown("Utilize o modelo de regressão para estimar o preço de um jogo com base em suas características, incluindo tendências de tempo e popularidade.")
-    st.markdown("---")
-
-    if modelo_regressao is not None and colunas_regressao is not None:
-
-        # --- Widgets de Entrada ---
-        top_50_devs = sorted(dev_popularity.nlargest(50).index.tolist())
-        top_50_pubs = sorted(pub_popularity.nlargest(50).index.tolist())
-        plat_options_advanced = sorted(df_main['platform'].unique())
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            adv_dev = st.selectbox("Desenvolvedor (Top 50)", options=top_50_devs, key="adv_dev")
-            adv_pub = st.selectbox("Publicadora (Top 50)", options=top_50_pubs, key="adv_pub")
-            adv_plat = st.selectbox("Plataforma", options=plat_options_advanced, key="adv_plat")
-        with col2:
-            adv_future_date = st.date_input("Data de Lançamento", value=pd.to_datetime("2025-09-01"), key="adv_date")
-            adv_genres = st.multiselect("Selecione os Gêneros", options=all_genres_list, default=[all_genres_list[0]], key="adv_genres")
-
-        if st.button("Prever Preço", type="primary"):
-            # 1. Preparar o DataFrame de Entrada com todas as features
-            future_date_dt = pd.to_datetime(adv_future_date)
-            input_data = {
-                'platform': adv_plat,
-                'developers': adv_dev,
-                'publishers': adv_pub,
-                'release_year': future_date_dt.year,
-                'release_month': future_date_dt.month,
-                'time_idx': (future_date_dt - df_main['release_date'].min()).days,
-                'dev_popularity': dev_popularity.get(adv_dev, 0),
-                'pub_popularity': pub_popularity.get(adv_pub, 0)
-            }
-            # 2. Adicionar as features de GÊNERO exatamente como no treino
-            all_original_genre_cols = [col for col in df_main.columns if col.startswith('genre_') and col != 'genre_list']
-            for genre_col in all_original_genre_cols:
-                genre_name = genre_col.replace('genre_', '')
-                input_data[genre_col] = 1 if genre_name in adv_genres else 0
-            
-            input_df = pd.DataFrame([input_data])
-
-            # Define explicitamente quais colunas devem ser transformadas
-            cols_to_encode = ['platform', 'developers', 'publishers']
-            # O get_dummies agora manterá todas as outras colunas numéricas
-            input_encoded = pd.get_dummies(input_df, columns=cols_to_encode)
-            final_input = input_encoded.reindex(columns=colunas_regressao, fill_value=0)
-            
-            # 3. Fazer a Predição
-            preco_previsto = modelo_regressao.predict(final_input)
-
-            # 4. Exibir o Resultado
-            st.success(f"### Previsão de Preço: **${preco_previsto[0]:.2f}**")
-            
-            avg_price_platform = df_main[df_main['platform'] == adv_plat]['preco_dolar'].mean()
-            st.metric(label=f"Preço Médio Atual para '{adv_plat}'", value=f"${avg_price_platform:.2f}")
-
-
-    else:
-        st.error("O modelo de regressão e/ou suas colunas não foram carregados. Verifique os logs na barra lateral.")
+# --- Tab 7: Informações Adicionais (Pode ser removida se não for usada) ---
+with tab7:
+    st.header("Informações Adicionais")
+    st.write("Esta aba pode ser usada para adicionar informações sobre o projeto, dados ou outras explicações.")
+    st.markdown("""
+        **Desenvolvimento:** Este dashboard foi desenvolvido como parte de um projeto de análise de dados.
+        **Fonte dos Dados:** Dados fictícios/sintéticos para fins demonstrativos.
+        **Contato:** [Seu Nome/Email/LinkedIn]
+    """)
 
 st.sidebar.markdown("---")
 st.sidebar.info(

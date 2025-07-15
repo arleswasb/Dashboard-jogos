@@ -6,6 +6,7 @@ pandas==2.2.3
 plotly
 numpy==1.26.4
 matplotlib
+forex-python
 seaborn # Adicionado pois você usa no app
 
 # Bibliotecas para o modelo de Machine Learning

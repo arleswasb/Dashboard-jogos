@@ -10,7 +10,9 @@ import joblib
 import numpy as np 
 from sklearn.metrics import confusion_matrix, accuracy_score, classification_report 
 import matplotlib.pyplot as plt 
-import seaborn as sns 
+import seaborn as sns
+from forex_python.converter import CurrencyRates
+import datetime
 
 # --- Configuração da página Streamlit ---
 st.set_page_config(layout="wide", page_title="Dashboard de Análise de Jogos")
@@ -159,6 +161,19 @@ def load_and_preprocess_data():
     max_overall_year = int(df['release_year'].max())
     
     return df, min_overall_year, max_overall_year
+
+
+@st.cache_data(ttl=14400) # Cache por 14400 segundos = 4 horas
+def obter_cotacao_dolar():
+    """Busca a cotação USD para BRL e armazena em cache."""
+    try:
+        c = CurrencyRates()
+        taxa = c.get_rate('USD', 'BRL')
+        return taxa
+    except Exception as e:
+        st.error(f"Não foi possível obter a cotação do dólar. Erro: {e}")
+        return None # Retorna None em caso de erro
+
 
 # --- LÓGICA PRINCIPAL DE CARREGAMENTO E FILTROS ---
 
@@ -747,19 +762,28 @@ with tab_pred_avancada:
             
             # 3. Fazer a Predição
             preco_previsto = modelo_regressao.predict(final_input)
+            preco_usd = preco_previsto[0]
 
-            # 4. Exibir o Resultado
-            st.success(f"### Previsão de Preço: **${preco_previsto[0]:.2f}**")
-            
-            avg_price_platform = df_main[df_main['platform'] == adv_plat]['preco_dolar'].mean()
-            st.metric(label=f"Preço Médio Atual para '{adv_plat}'", value=f"${avg_price_platform:.2f}")
+            # 4. Obter cotação atual do dólar
+            cotacao = obter_cotacao_dolar()
 
+            if cotacao:
+                preco_brl = preco_usd * cotacao
 
-    else:
-        st.error("O modelo de regressão e/ou suas colunas não foram carregados. Verifique os logs na barra lateral.")
+                # 5. Exibir os Resultados
+                st.success(f"### Previsão de Preço: **${preco_usd:.2f} USD    {preco_brl:.2f} BRL**")
+                
+                # O restante do código para exibir a métrica continua aqui...
+                avg_price_platform = df_main[df_main['platform'] == adv_plat]['preco_dolar'].mean()
+                avg_price_brl = avg_price_platform * cotacao
+                st.metric(label=f"Preço Médio Atual para '{adv_plat}'", value=f"${avg_price_platform:.2f} USD", delta=f"R$ {avg_price_brl:.2f} BRL")
+            else:
+                # Se a cotação falhar, mostra apenas o valor em dólar
+                st.success(f"### Previsão de Preço: **${preco_usd:.2f} USD**")
+                st.warning("Não foi possível converter o valor para BRL no momento.")
 
-st.sidebar.markdown("---")
-st.sidebar.info(
+            st.sidebar.markdown("---")
+            st.sidebar.info(
     "Este dashboard interativo permite explorar dados de jogos, incluindo tendências de lançamento, "
     "preferências de gênero, atividades de desenvolvedores e distribuição de preços."
 )
